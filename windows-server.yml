@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Wip 
+
+Parameters:
+  KeyName:
+    Description: SSH keypair, used to retrieve admin password 
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+
+Resources:
+
+  # Port forwarding
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access
+
+      SecurityGroupIngress:
+
+        - IpProtocol: tcp # SSH access
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: tcp # RDP access
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: udp # SRT access
+          FromPort: 4200
+          ToPort: 4200
+          CidrIp: 0.0.0.0/0
+          
+
+  # G4dn.xlarge EC2 instance
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a61c9559ed98dd19
+      InstanceType: t3.micro # To change
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+          # Open port of firewall to allow SRT
+          New-NetFirewallRule -DisplayName "Allow SRT UDP 4200" -Direction Inbound -Profile Public -Action Allow -Protocol UDP -LocalPort 4200
+          </powershell>
+
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          commands:
+            01_initialize_drive:
+              command: !Sub | # Select the disk 1 (disk 0 is C:/, no other disk) and assign letter E to it
+                "list disk`nselect disk 1`nclean`ncreate partition primary`nformat fs=ntfs`nassign letter=e" | diskpart
+            02_download_file: # Download web browser, handle the rest yourself
+              command: !Sub |
+                Invoke-WebRequest "https://laptop-updates.brave.com/latest/winx64" -OutFile "E:\BraveBrowser.exe"
+            99_txt_data: # Save some values in a txt for easy retrieval
+              command: !Sub |
+                $privateIp = (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
+                $publicIp = (curl checkip.amazonaws.com).Content
+
+                $content = @"
+                Private ip: $privateIp
+                Public ip: $publicIp
+                "@
+
+                $content | Out-File -FilePath "E:\data.txt" -Encoding UTF8
+
+
+  # gp3 volume
+  MyVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !GetAtt MyInstance.AvailabilityZone
+      Size: 10 # to increase
+      VolumeType: gp3
+
+  MountPoint:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref MyInstance
+      VolumeId: !Ref MyVolume
+      Device: xvdh
