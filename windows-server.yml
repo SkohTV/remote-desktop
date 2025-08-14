@@ -37,6 +37,7 @@ Resources:
   # G4dn.xlarge EC2 instance
   MyInstance:
     Type: AWS::EC2::Instance
+
     Properties:
       ImageId: ami-0a61c9559ed98dd19
       InstanceType: t3.micro # To change
@@ -46,31 +47,26 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           <powershell>
+          # Select the disk 1 (disk 0 is C:/, no other disk) and assign letter E to it
+          "list disk`nselect disk 1`nclean`ncreate partition primary`nformat fs=ntfs`nassign letter=e" | diskpart
+
+          # Download web browser, handle the rest yourself
+          Invoke-WebRequest "https://laptop-updates.brave.com/latest/winx64" -OutFile "E:\BraveBrowser.exe"
+
           # Open port of firewall to allow SRT
           New-NetFirewallRule -DisplayName "Allow SRT UDP 4200" -Direction Inbound -Profile Public -Action Allow -Protocol UDP -LocalPort 4200
+
+          # Save some values in a txt for easy retrieval
+          $privateIp = (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
+          $publicIp = (curl checkip.amazonaws.com).Content
+
+          $content = @"
+          Private ip: $privateIp
+          Public ip: $publicIp
+          "@
+
+          $content | Out-File -FilePath "E:\data.txt" -Encoding UTF8
           </powershell>
-
-    Metadata:
-      AWS::CloudFormation::Init:
-        config:
-          commands:
-            01_initialize_drive:
-              command: !Sub | # Select the disk 1 (disk 0 is C:/, no other disk) and assign letter E to it
-                "list disk`nselect disk 1`nclean`ncreate partition primary`nformat fs=ntfs`nassign letter=e" | diskpart
-            02_download_file: # Download web browser, handle the rest yourself
-              command: !Sub |
-                Invoke-WebRequest "https://laptop-updates.brave.com/latest/winx64" -OutFile "E:\BraveBrowser.exe"
-            99_txt_data: # Save some values in a txt for easy retrieval
-              command: !Sub |
-                $privateIp = (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
-                $publicIp = (curl checkip.amazonaws.com).Content
-
-                $content = @"
-                Private ip: $privateIp
-                Public ip: $publicIp
-                "@
-
-                $content | Out-File -FilePath "E:\data.txt" -Encoding UTF8
 
 
   # gp3 volume

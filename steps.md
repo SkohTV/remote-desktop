@@ -10,7 +10,8 @@ Upload `windows-server.yml` to [AWS CloudFormation](https://aws.amazon.com/fr/cl
 ## After stack creation
 Download RDP file  
 Decrypt admin password (using KeyPair)  
-Then log into the computer using a RDP Client ([Remmina](https://remmina.org/) for Linux, none required for Windows)
+Then log into the computer using a RDP Client ([Remmina](https://remmina.org/) for Linux, none required for Windows)  
+> Make sure that the password doesn't have a `<CR>` at the end
 
 
 ## After AWS setup
