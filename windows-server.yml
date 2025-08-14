@@ -10,7 +10,7 @@ Parameters:
 
 Resources:
 
-  # Port forwarding
+  # Port forwarding / opening
   InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -40,7 +40,7 @@ Resources:
 
     Properties:
       ImageId: ami-0a61c9559ed98dd19
-      InstanceType: t3.micro # To change
+      InstanceType: g4dn.xlarge
       KeyName: !Ref KeyName
       SecurityGroups:
         - !Ref InstanceSecurityGroup
@@ -74,9 +74,10 @@ Resources:
     Type: AWS::EC2::Volume
     Properties:
       AvailabilityZone: !GetAtt MyInstance.AvailabilityZone
-      Size: 10 # to increase
+      Size: 100
       VolumeType: gp3
 
+  # Link between volume and instance
   MountPoint:
     Type: AWS::EC2::VolumeAttachment
     Properties:
