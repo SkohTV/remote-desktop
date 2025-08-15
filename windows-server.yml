@@ -1,5 +1,7 @@
+# The most helpful template in the world -> https://raw.githubusercontent.com/aws-samples/amazon-ec2-nice-dcv-samples/main/cfn/WIndowsServer-NICE-DCV.yaml
+
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Wip 
+Description: Remote Windows Desktop for video editing / streaming
 
 Parameters:
   KeyName:
@@ -32,55 +34,269 @@ Resources:
           FromPort: 4200
           ToPort: 4200
           CidrIp: 0.0.0.0/0
-          
 
-  # G4dn.xlarge EC2 instance
-  MyInstance:
-    Type: AWS::EC2::Instance
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
 
+
+
+  EC2Role:
+    Type: AWS::IAM::Role
     Properties:
-      ImageId: ami-0a61c9559ed98dd19
-      InstanceType: g4dn.xlarge
-      KeyName: !Ref KeyName
-      SecurityGroups:
-        - !Ref InstanceSecurityGroup
-      UserData:
-        Fn::Base64: !Sub |
-          <powershell>
-          # Select the disk 1 (disk 0 is C:/, no other disk) and assign letter E to it
-          "list disk`nselect disk 1`nclean`ncreate partition primary`nformat fs=ntfs`nassign letter=e" | diskpart
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: [sts:AssumeRole]
+      Policies:
+        - PolicyName: gpuDrivers
+          PolicyDocument: # https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/install-nvidia-driver.html
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                Resource:
+                  - arn:*:s3:::nvidia-gaming
+                  - arn:*:s3:::nvidia-gaming/*
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
 
-          # Download web browser, handle the rest yourself
-          Invoke-WebRequest "https://laptop-updates.brave.com/latest/winx64" -OutFile "E:\BraveBrowser.exe"
 
-          # Open port of firewall to allow SRT
-          New-NetFirewallRule -DisplayName "Allow SRT UDP 4200" -Direction Inbound -Profile Public -Action Allow -Protocol UDP -LocalPort 4200
+  EC2Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref EC2Role]
 
-          # Save some values in a txt for easy retrieval
-          $privateIp = (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
-          $publicIp = (curl checkip.amazonaws.com).Content
-
-          $content = @"
-          Private ip: $privateIp
-          Public ip: $publicIp
-          "@
-
-          $content | Out-File -FilePath "E:\data.txt" -Encoding UTF8
-          </powershell>
 
 
   # gp3 volume
   MyVolume:
     Type: AWS::EC2::Volume
     Properties:
-      AvailabilityZone: !GetAtt MyInstance.AvailabilityZone
-      Size: 100
+      AvailabilityZone: !GetAtt ec2Instance.AvailabilityZone
+      Size: 70
       VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
 
   # Link between volume and instance
   MountPoint:
     Type: AWS::EC2::VolumeAttachment
     Properties:
-      InstanceId: !Ref MyInstance
+      InstanceId: !Ref ec2Instance
       VolumeId: !Ref MyVolume
       Device: xvdh
+
+
+
+  # G4dn.xlarge EC2 instance
+  ec2Instance:
+    Type: AWS::EC2::Instance
+
+    Metadata:
+      Comment: Install Update files
+      AWS::CloudFormation::Init:
+        configSets:
+          setup:
+            - 00_setup
+          software_install:
+            - 01_software_install
+          gpu_download:
+            - 02_gpu_download
+
+        00_setup:
+          files:
+
+            c:\\windows\\temp\\initial-setup.cmd:
+              content: |
+                @echo off
+                powershell -Command "Start-Sleep -s 5"
+                IF EXIST c:\windows\temp\initial-setup.txt EXIT
+                ECHO started > c:\windows\temp\initial-setup.txt
+
+                @echo ** Select the disk 1 (disk 0 is C:/, no other disk) and assign letter E to it
+                (
+                  echo list disk
+                  echo select disk 1
+                  echo clean
+                  echo create partition primary
+                  echo format fs=ntfs quick
+                  echo assign letter=e
+                ) | diskpart
+
+                @echo ** Clean desktop
+                del /q "C:\Users\Administrator\Desktop\*"
+                curl -L -o "C:\Users\Administrator\Desktop\BraveBrowser.exe" "https://laptop-updates.brave.com/latest/winx64"
+
+                @echo ** Open port of firewall to allow SRT
+                netsh advfirewall firewall add rule name="Allow SRT UDP 4200" dir=in action=allow protocol=UDP localport=4200
+
+                ECHO done >> c:\windows\temp\initial-setup.txt
+                exit
+
+
+          commands: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html#aws-resource-init-commands
+            install:
+              command: c:\windows\temp\initial-setup.cmd >> c:\windows\temp\initial-setup.log
+              ignoreErrors: true
+              waitAfterCompletion: forever
+
+
+        01_software_install:
+          files:
+            c:\\windows\\temp\\software-install.cmd:
+              content: !Sub |
+                @echo off
+                IF EXIST c:\windows\temp\software-install.txt EXIT
+                ECHO started > c:\windows\temp\software-install.txt
+
+                powershell -C "Get-EC2InstanceMetadata -Category InstanceId" > c:\windows\temp\instanceid.txt
+                set /p INSTANCEID=<c:\windows\temp\instanceid.txt
+                net user administrator %INSTANCEID%
+
+                @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
+
+                choco install --no-progress -y awscli
+                setx /M AWS_CLI_AUTO_PROMPT on-partial
+
+                ECHO done > c:\windows\temp\software-install.txt
+                exit
+
+          commands: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html#aws-resource-init-commands
+            install:
+              command: c:\windows\temp\software-install.cmd >> c:\windows\temp\software-install.log
+              ignoreErrors: true
+              waitAfterCompletion: forever
+
+
+        02_gpu_download:
+          files:
+            c:\\windows\\temp\\download-NVIDIA-Gaming-driver.cmd:
+              content: |
+                @echo off
+                powershell -Command "Start-Sleep -s 5"
+                IF EXIST c:\windows\temp\download-NVIDIA-Gaming-driver.txt EXIT
+                ECHO started > c:\windows\temp\download-NVIDIA-Gaming-driver.txt
+
+                @echo ** Can't use "aws", need to use full path, maybe issue with PATH ?
+                "C:\Program Files\Amazon\AWSCLIV2\aws" s3 cp --recursive s3://nvidia-gaming/windows/latest/ "C:\Users\Administrator\Desktop"
+
+                reg add "HKLM\SYSTEM\CurrentControlSet\Services\nvlddmkm\Global" /v vGamingMarketplace /t REG_DWORD /d 2 /f
+                reg add "HKLM\SOFTWARE\NVIDIA Corporation\Global" /v vGamingMarketplace /t REG_DWORD /d 2
+                powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://nvidia-gaming.s3.amazonaws.com/GridSwCert-Archive/GridSwCertWindows_2023_9_22.cert', 'C:\Users\Public\Documents\GridSwCert.txt')"
+
+                ECHO done >> c:\windows\temp\download-NVIDIA-Gaming-driver.txt
+                exit
+
+          commands: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html#aws-resource-init-commands
+            install:
+              command: c:\windows\temp\download-NVIDIA-Gaming-driver.cmd >> c:\windows\temp\download-NVIDIA-Gaming-driver.log
+              ignoreErrors: true
+
+
+
+    Properties:
+      ImageId: ami-0a61c9559ed98dd19
+      InstanceType: g4dn.xlarge
+      IamInstanceProfile: !Ref EC2Profile
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref InstanceSecurityGroup
+
+      BlockDeviceMappings: # For C:\ device
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            DeleteOnTermination: true
+
+      UserData:
+        Fn::Base64: !Sub |
+          <script>
+          @echo off
+          cfn-init.exe -v --stack ${AWS::StackId} --resource ec2Instance --region ${AWS::Region} --configsets setup
+
+          @echo ** install some software 
+          cfn-init.exe -v --stack ${AWS::StackId} --resource ec2Instance --region ${AWS::Region} --configsets software_install
+
+          @echo ** install graphics driver
+          cfn-init.exe -v --stack ${AWS::StackId} --resource ec2Instance --region ${AWS::Region} --configsets gpu_download
+
+          cfn-signal.exe -e %errorlevel% --stack ${AWS::StackId} --resource ec2Instance --region ${AWS::Region}
+          </script>
+
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+
+        #
+        #
+        # 02_dcv_install:
+        #   files:
+        #     c:\\windows\\temp\\dcv-install.cmd:
+        #       content: !Sub |
+        #         @echo off
+        #         powershell -Command "Start-Sleep -s 5"
+        #         IF EXIST c:\windows\temp\dcv-install.txt EXIT
+        #         ECHO done > c:\windows\temp\dcv-install.txt
+        #
+        #         cd \windows\temp
+        #
+        #         powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; (New-Object System.Net.WebClient).DownloadFile('https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-server-x64-Release.msi', 'nice-dcv-server-x64-Release.msi')"
+        #
+        #         @echo ** ITS ONE OR THE OTHER IDK
+        #         @echo ** msiexec /i nice-dcv-server-x64-Release.msi ADDLOCAL=ALL REMOVE=iddDriver /quiet /norestart /l*v dcv-install-msi.log
+        #         msiexec.exe /i nice-dcv-server-x64-Release.msi ADDLOCAL=ALL /quiet /norestart /l*v dcv-install-msi.log                  
+        #
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management /v create-session /t REG_DWORD /d 1 /f
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management\automatic-console-session /v owner /t REG_SZ /d "administrator" /f
+        #
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management\automatic-console-session /v storage-root /t REG_SZ /d C:/Users// /f
+        #
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\connectivity /v enable-quic-frontend /t REG_DWORD /d 1 /f
+        #
+        #         @ echo ** change listenPort to 8443
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\connectivity /v web-port /t REG_DWORD /d 8443 /f
+        #         reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\connectivity /v quic-port /t REG_DWORD /d 8443 /f
+        #
+        #         reg.exe add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\display /v web-client-max-head-resolution /t REG_SZ /d "(0, 0)" /f
+        #         reg.exe add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\display /v console-session-default-layout /t REG_SZ /d "[{'w':<1920>, 'h':<1080>, 'x':<0>, 'y': <0>}]" /f
+        #
+        #         exit
+        #
+        #   commands: # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html#aws-resource-init-commands
+        #     install:
+        #       command: c:\windows\temp\dcv-install.cmd >> c:\windows\temp\dcv-install.log
+        #       ignoreErrors: true
+        #
+        #
+            # c:\\Users\\Administrator\\update-DCV.cmd:
+            #   content: |
+            #     @echo off
+            #     cd \windows\temp
+            #     del \windows\temp\nice-dcv-*.msi
+            #     del \windows\temp\dcv-install-msi.log
+            #     powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-server-x64-Release.msi', 'nice-dcv-server-x64-Release.msi')"
+            #     wmic product where "name like '%%DCV%%'" get name,version
+            #     start /wait msiexec.exe /i nice-dcv-server-x64-Release.msi /quiet /norestart /l*v dcv-install-msi.log
+            #     reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management\automatic-console-session /v owner /t REG_SZ /d "administrator" /f
+            #     reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management /v create-session /t REG_DWORD /d 1 /f
+            #     reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\session-management\automatic-console-session /v storage-root /t REG_SZ /d C:/Users// /f
+            #     reg add HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv\connectivity /v enable-quic-frontend /t REG_DWORD /d 1 /f
+            #     wmic product where "name like '%%DCV%%'" get name,version
+            #
+            # c:\\Users\\Administrator\\update-awscli.cmd:
+            #   content: |
+            #     @echo off
+            #     aws --version
+            #     choco upgrade -y awscli
+            #     aws --version
+            #
