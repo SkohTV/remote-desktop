@@ -13,24 +13,22 @@ Then log into the computer using a RDP Client ([Remmina](https://remmina.org/) f
 
 
 ## After AWS setup
-Install web browser using `BraveBrowser.exe` from `Desktop`
-Install `NVIDIA GPU Drivers` from `Desktop` (might take some time to download)
-Change the Administrator password
+Install web browser using `BraveBrowser.exe` from `Desktop`  
+Install `NVIDIA GPU Drivers` from `Desktop` (might take some time to download)  
+**Change the Administrator password**
 
 ### Parsec
-Download Parsec from `https://parsec.app/downloads`
-Install in **Per computer** mode, to be able to startup directly
-
-
-Install Parsec & login
-Go to `Settings` -> `Hosts` -> `Virtual Display Fallback` and disable it
+Download Parsec from `https://parsec.app/downloads`  
+Install in **Per computer** mode, to be able to startup directly  
+Login  
 Restart the instance
 
 
 ## After restart 
+Disable the wired screen in Settings  
 Install the other installables at `https://drive.proton.me/urls/V6HDG4DSSG#zRut7jRHPdUj`
 
 ### OBS
 Import **config** & **profile** & **settings** from `XXX`
 
-
+### Premiere Pro
