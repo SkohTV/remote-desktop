@@ -27,12 +27,16 @@ Restart the instance
 ## After restart 
 Disable the wired screen in Settings  
 Install the other installables
+- [OBS](https://obsproject.com/download)
+- Premiere Pro
+- [Affinity Photo 2](https://store.serif.com/en-us/update/windows/photo/2/)
+- [VB-Cable](https://vb-audio.com/Cable/)
 
 ### OBS
 Import **config** & **profile** & **settings** from `XXX`
 
-### Premiere Pro
-...
+---
 
-### Affinity Photo 2
-...
+Memo: to use SRT, create a `Media Source`, untick `Local file` and use url `srt://0.0.0.0:PORT?mode=listener`
+https://obsproject.com/kb/srt-protocol-streaming-guide
+
