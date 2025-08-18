@@ -1,14 +1,11 @@
 # remote-desktop
 Desktop-in-cloud setup, using AWS &amp; other automations  
+Check [wip](./steps.md)
 
 
 ## Todo
 
-### On startup
-\- Screen size is wrong by default
-...
-
 ### Other
-...
-\- Select region
-\- Autofill tags
+\- Select region in Cloudformation
+
+### Improve everything

@@ -31,6 +31,7 @@ Install the other installables
 - Premiere Pro
 - [Affinity Photo 2](https://store.serif.com/en-us/update/windows/photo/2/)
 - [VB-Cable](https://vb-audio.com/Cable/)
+- [VLC](https://images.videolan.org/vlc/)
 
 ### OBS
 Import **config** & **profile** & **settings** from `XXX`
