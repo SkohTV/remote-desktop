@@ -171,8 +171,8 @@ Resources:
 
 
     Properties:
-      ImageId: ami-0a61c9559ed98dd19
-      InstanceType: g4dn.xlarge
+      ImageId: ami-0700225503364abed 
+      InstanceType: g6.2xlarge
       IamInstanceProfile: !Ref EC2Profile
       KeyName: !Ref KeyName
       SecurityGroups:
