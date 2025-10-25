@@ -32,7 +32,6 @@ done
 
 
 # The big command
-# To find 
 ffmpeg \
   -f pulse -i "${PL_DEVICE}.monitor" \
   -device "${WL_DEVICE}" -f kmsgrab -i - \

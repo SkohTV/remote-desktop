@@ -1,6 +1,7 @@
-# remote-desktop
+# Remote Desktop 
 Desktop-in-cloud setup, using AWS &amp; other automations  
-Check [wip](./steps.md)
+Also some cool [scripts](./scripts/)  
+Check [steps](./steps.md) to setup Remote Desktop
 
 
 ## Todo
