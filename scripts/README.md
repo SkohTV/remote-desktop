@@ -29,6 +29,16 @@ sudo steamos-readonly enable
 If you need to [enable SSH on your steamdeck](https://pimylifeup.com/steam-deck-ssh/)  
 You also don't need to go into desktop to check your ip every time, you can [go settings > internet and click on on the internet you're connected to](https://www.reddit.com/r/SteamDeck/comments/180482r/comment/li7u8z1/)
 
+### Receiving
+```bash
+# Listeners
+
+ffplay -analyzeduration 1000000 -fflags nobuffer -fflags discardcorrupt -flags low_delay "srt://0.0.0.0:PORT?mode=listener"
+# or via OBS (srt://0.0.0.0:4200?mode=listener) (mpgets)
+
+vlc -vvv "srt://IP:PORT"
+```
+
 
 ## `steamdeck-videos.ssh`
 Convert and download videos made with Steam recording to your machine (via `scp` and `ffmpeg`)
